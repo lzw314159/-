@@ -1,0 +1,56 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+
+# 定义带线性背景的洛伦兹函数
+def lorentzian_with_background(x, A, x0, Γ, B, C):
+    return A / ((x - x0)**2 + (Γ/2)**2) + B*x + C
+
+# 生成示例数据（添加噪声）
+np.random.seed(0)
+x_data = np.linspace(0, 10, 200)
+true_params = [5.0, 5.0, 1.0, -0.1, 0.5]  # A, x0, Γ, B, C
+y_data = lorentzian_with_background(x_data, *true_params) + 0.1*np.random.randn(len(x_data))
+
+# 初始参数估计
+y_max = np.max(y_data)
+x0_guess = x_data[np.argmax(y_data)]
+y_half = y_max / 2
+
+# 计算半高宽Γ的初始猜测
+mask = y_data >= y_half
+x_above_half = x_data[mask]
+Γ_guess = np.ptp(x_above_half)  # 最大值与最小值之差
+
+# 估计背景参数（线性）
+bg_mask = (x_data < 2) | (x_data > 8)
+B_guess, C_guess = np.polyfit(x_data[bg_mask], y_data[bg_mask], 1)
+A_guess = (y_max - (B_guess*x0_guess + C_guess)) * (Γ_guess/2)**2
+
+p0 = [A_guess, x0_guess, Γ_guess, B_guess, C_guess]
+
+# 执行拟合
+popt, pcov = curve_fit(lorentzian_with_background, x_data, y_data, p0=p0, maxfev=10000)
+
+# 拟合结果
+y_fit = lorentzian_with_background(x_data, *popt)
+residuals = y_data - y_fit
+ss_res = np.sum(residuals**2)
+ss_tot = np.sum((y_data - np.mean(y_data))**2)
+r_squared = 1 - (ss_res / ss_tot)
+param_errors = np.sqrt(np.diag(pcov))
+
+# 输出结果
+print("拟合参数 (A, x0, Γ, B, C):", popt)
+print("参数误差:", param_errors)
+print("R²:", r_squared)
+
+# 绘图
+plt.figure(figsize=(10, 6))
+plt.scatter(x_data, y_data, label='数据', color='blue', s=10)
+plt.plot(x_data, y_fit, label='拟合曲线', color='red')
+plt.plot(x_data, lorentzian_with_background(x_data, *popt[:3], 0, 0), '--', label='洛伦兹峰', color='green')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.legend()
+plt.show()
